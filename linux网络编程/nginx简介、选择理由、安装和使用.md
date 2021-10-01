@@ -13,17 +13,200 @@ linux epoll技术； windows IOCP
 内存池，进程池，线程池，事件驱动等等；
 学习研究大师级的人写的代码，是一个程序开发人员能够急速进步的最佳途径；
 
+### 配置固定IP地址
+
+需要修改配置文件 需要vim编辑器
+vim安装：sudo apt-get install vim-gtk
+两台主机（windows, ubuntu)
+IP地址不能相同，但是要在同一网段下
+主动发起数据包的这一端叫做“客户端”，另一端叫做“服务器端”
+windows下的网络信息用ipconfig来查看
+
+```linux
+windows
+IPv4 地址 . . . . . . . . . . . . : 192.168.1.105
+   子网掩码  . . . . . . . . . . . . : 255.255.255.0
+   默认网关. . . . . . . . . . . . . : 192.168.1.1
+
+ubuntu
+IPv4 地址 . . . . . . . . . . . . : 192.168.1.166
+子网掩码 . . . . . . . . . . . . : 255.255.255.0 /  192.168.1.0/24(linux子网掩码)
+默认网关. . . . . . . . . . . . . : 192.168.1.1
+```
+
+linux查看网络信息（ifconfig)
+
+```shell
+ifconfig
+```
+
+看到网卡叫做 ens33
+
+编辑ubuntu下的网络配置
+
+```shell
+cd /etc
+cd network
+# 编辑该文件夹下的 interfaces 文件
+sudo vim interfaces
+
+# 注释掉 DHCP
+# iface ens33 inet dhcp
+
+# 写入
+inace ens33 inet static
+address 192.168.1.166
+geteway 192.168.1.1
+netmask 192.168.1.0/24
+
+```
+
+vim小技巧
+
+```shell
+# vim分为命令状态和文本输入状态
+# 切换为输入状态
+i
+# 切换为命令状态
+esc
+# 保存退出(命令状态下)
+:wq
+# 不保存退出
+:q! 
+```
+
+### 修改DNS
+
+```shell
+# /etc/network目录下
+sudo vim /etc/resolvconf.resolv.conf.d.base
+
+# 写入
+nameserver 8.8.8.8
+# 存盘退出
+# 重启机器
+sudo rebot
+```
+
+_其实关于网络配置这里，如果是20以后的服务器server ubuntu，是在进行系统安装的时候就可以直接进行设置的（这里我是已经早就设置好了，所以以上流程没有进行实操）_
+
+### 配置远程连接
+
+#### 一：在ubuntu安装ssh服务
+
+```shell
+# 查看是否安装了ssh
+ps -elgrep ssh
+# 安装ssh
+sudo apt-get install openssh-server
+
+```
+
+#### 二：windows安装远程连接软件xshell
+
+### 安装编译工具gcc（编译C）,g++（编译cpp,c++）等
+
+_Ubuntu缺省情况下，并没有提供C/C++的编译环境，因此还需要手动安装。但是如果单独安装gcc以及g++比较麻烦，幸运的是，Ubuntu提供了一个build-essential软件包。也就是说，安装了该软件包，编译c/c++所需要的软件包也都会被安装。因此如果想在Ubuntu中编译c/c++程序,只需要安装该软件包就可以了。_
+
+```shell
+# 安装编译必须的环境（库）
+sudo apt-get install build-essential
+```
+
+### 共享一个操作目录
+
+通过虚拟机把windows下的目录进行共享，让linux可以访问这个目录
+
 # 三：安装nginx，搭建web服务器
+
+_Linux pwd（英文全拼：print work directory） 命令用于显示工作目录。
+执行 pwd 指令可立刻得知您目前所在的工作目录的绝对路径名称。
+语法_
+
+```shell
+
+pwd [--help][--version]
+
+# 参数说明:
+
+# --help 在线帮助。
+# --version 显示版本信息。
+```
 
 （3.1）安装前提
 a)epoll,linux 内核版本为2.6或者以上；
+
+```shell
+# 查看linux内核
+uname -a
+```
+
+```shell
+# Linux uname（英文全拼：unix name）命令用于显示系统信息。
+
+# uname 可显示电脑以及操作系统的相关信息。
+
+# 语法
+# uname [-amnrsv][--help][--version]
+# 参数说明：
+
+# -a或--all 　显示全部的信息。
+# -m或--machine 　显示电脑类型。
+# -n或--nodename 　显示在网络上的主机名称。
+# -r或--release 　显示操作系统的发行编号。
+# -s或--sysname 　显示操作系统名称。
+# -v 　显示操作系统的版本。
+# --help 　显示帮助。
+# --version 　显示版本信息。
+# 实例
+# 显示系统信息：
+
+uname -a
+# Linux iZbp19byk2t6khuqj437q6Z 4.11.0-14-generic #20~16.04.1-Ubuntu SMP Wed Aug 9 09:06:22 UTC 2017 x86_64 x86_64 x86_64 GNU/Linux
+# 显示计算机类型：
+
+uname -m
+# x86_64
+# 显示计算机名：
+
+uname -n
+# runoob-linux
+# 显示操作系统发行编号：
+
+uname -r
+# 4.11.0-14-generic
+# 显示操作系统名称：
+
+uname -s
+# Linux
+# 显示系统版本与时间：
+
+uname -v
+#20~16.04.1-Ubuntu SMP Wed Aug 9 09:06:22 UTC 2017
+
+```
+
 b)gcc编译器，g++编译器
-c)pcre库：函数库；支持解析正则表达式；apt-get install libpcre3-dev
-d)zlib库：压缩解压缩功能 apt-get install libz-dev
-e)openssl库：ssl功能相关库，用于网站加密通讯 apt-get install libssl-dev
+c)pcre库：函数库；支持解析正则表达式；
+
+```shell
+sudo apt-get install libpcre3-dev
+```
+
+d)zlib库：压缩解压缩功能
+
+```shell
+sudo apt-get install libz-dev
+```
+
+e)openssl库：ssl功能相关库，用于网站加密通讯
+
+```shell
+sudo apt-get install libssl-dev
+```
 
 （3.2）nginx源码下载以及目录结构简单认识
-nginx官网 http://www.nginx.org
+nginx官网 <http://www.nginx.org>
 nginx的几种版本
 (1)mainline版本：版本号中间数字一般为奇数。更新快，一个月内就会发布一个新版本，最新功能，bug修复等，稳定性差一点；
 (2)stable版本：稳定版，版本号中间数字一般为偶数。经过了长时间的测试，比较稳定，商业化环境中用这种版本；这种版本发布周期比较长，几个月；
