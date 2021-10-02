@@ -214,40 +214,139 @@ nginx的几种版本
 安装，现在有这种二进制版本：通过命令行直接安装；
 灵活：要通过编译 nginx源码手段才能把第三方模块弄进来；
 
-auto / :编译相关的脚本，可执行文件configure一会会用到这些脚本
-cc / : 检查编译器的脚本
-lib / : 检查依赖库的脚本
-os / : 检查操作系统类型的脚本
-type / : 检查平台类型的脚本
-CHANGES : 修复的bug，新增加的功能说明
-CHANGES.ru : 俄语版CHANGES
-conf / : 默认的配置文件
-configure : 编译nginx之前必须先执行本脚本以生成一些必要的中间文件
-contrib / : 脚本和工具，典型的是vim高亮工具
-vim / : vim高亮工具
-html / : 欢迎界面和错误界面相关的html文件
-man / : nginx帮助文件目录
-src / : nginx源码目录
-core : 核心代码
-event : event(事件)模块相关代码
-http : http(web服务)模块相关代码
-mail : 邮件模块相关代码
-os : 操作系统相关代码
-stream : 流处理相关代码
-objs/:执行了configure生成的中间文件目录
-ngx_modules.c：内容决定了我们一会编译nginx的时候有哪些模块会被编译到nginx里边来。
-Makefile:执行了configure脚本产生的编译规则文件，执行make命令时用到
-*/
+<http://nginx.org/download/nginx-1.20.1.tar.gz>
+
+```shell
+# 创建一个目录用于存放nginx源码包
+mkdir nginxsourcecode
+# 进入文件夹sourcecode
+cd nginxsourcecode
+# 下载源码压缩包
+wget http://nginx.org/download/nginx-1.20.1.tar.gz
+# wget是一个下载文件的工具，它用在命令行下。对于Linux用户是必不可少的工具，我们经常要下载一些软件或从远程服务器恢复备份到本地服务器。
+
+#   wget支持HTTP，HTTPS和FTP协议，可以使用HTTP代理。所谓的自动下载是指，wget可以在用户退出系统的之后在后台执行。这意味这你可以登录系统，启动一个wget下载任务，然后退出系统，wget将在后台执行直到任务完成
+
+#    wget 可以跟踪HTML页面上的链接依次下载来创建远程服务器的本地版本，完全重建原始站点的目录结构。这又常被称作”递归下载”。
+
+#    wget 非常稳定，它在带宽很窄的情况下和不稳定网络中有很强的适应性.如果是由于网络的原因下载失败，wget会不断的尝试，直到整个文件下载完毕。如果是服务器打断下载过程，它会再次联到服务器上从停止的地方继续下载。这对从那些限定了链接时间的服务器上下载大文件非常有用。
+
+# 查看下载内容
+ls -la
+# invi@inviubuntu:~/sourcecode$ ls -la
+# total 1048
+# drwxrwxr-x 2 invi invi    4096 Oct  2 00:57 .
+# drwxr-x--- 4 invi invi    4096 Oct  2 00:54 ..
+# -rw-rw-r-- 1 invi invi 1061461 May 25 15:34 nginx-1.20.1.tar.gz
+
+# 解压源码包
+tar -xzvf nginx-1.20.1.tar.gz
+
+# 进入解压目录
+cd nginx-1.20.1/
+
+invi@inviubuntu:~/sourcecode/nginx-1.20.1$ ls -la
+total 820
+drwxr-xr-x 8 invi invi   4096 May 25 12:35 .
+drwxrwxr-x 3 invi invi   4096 Oct  2 01:13 ..
+drwxr-xr-x 6 invi invi   4096 Oct  2 01:13 auto
+-rw-r--r-- 1 invi invi 311503 May 25 12:35 CHANGES
+-rw-r--r-- 1 invi invi 475396 May 25 12:35 CHANGES.ru
+drwxr-xr-x 2 invi invi   4096 Oct  2 01:13 conf
+-rwxr-xr-x 1 invi invi   2590 May 25 12:35 configure
+drwxr-xr-x 4 invi invi   4096 Oct  2 01:13 contrib
+drwxr-xr-x 2 invi invi   4096 Oct  2 01:13 html
+-rw-r--r-- 1 invi invi   1397 May 25 12:35 LICENSE
+drwxr-xr-x 2 invi invi   4096 Oct  2 01:13 man
+-rw-r--r-- 1 invi invi     49 May 25 12:35 README
+drwxr-xr-x 9 invi invi   4096 Oct  2 01:13 src
+
+# 将代码高亮工具拷贝到vim
+cp -r contrib/vim ~/.vim
+
+```
+
+### nginx源码包的目录结构
+
+>auto / :编译相关的脚本，可执行文件configure一会会用到这些脚本
+>>cc / : 检查编译器的脚本
+>>lib / : 检查依赖库的脚本
+>>os / : 检查操作系统类型的脚本
+>>type / : 检查平台类型的脚本
+>CHANGES : 修复的bug，新增加的功能说明
+>CHANGES.ru : 俄语版CHANGES
+>conf / : 默认的配置文件
+>configure : 编译nginx之前必须先执行本脚本以生成一些必要的中间文件
+>contrib / : 脚本和工具，典型的是vim高亮工具
+>>vim / : vim高亮工具
+>html / : 欢迎界面和错误界面相关的html文件
+>man / : nginx帮助文件目录
+>src / : nginx源码目录
+>>core : 核心代码
+>>event : event(事件)模块相关代码
+>>http : http(web服务)模块相关代码
+>>mail : 邮件模块相关代码
+>>os : 操作系统相关代码
+>>stream : 流处理相关代码
+>objs/:执行了configure生成的中间文件目录
+>ngx_modules.c：内容决定了我们一会编译nginx的时候有哪些模块会被编译到nginx里边来。
+>Makefile:执行了configure脚本产生的编译规则文件，执行make命令时用到
 
 （3.3）nginx的编译和安装
 a)编译的第一步：用configure来进行编译之前的配置工作
+
+```shell
+# 进入nginx源码包目录下，执行
 ./configure
-–prefix：指定最终安装到的目录：默认值 /usr/local/nginx
-–sbin-path：用来指定可执行文件目录：默认的是 sbin/ nginx
-–conf-path：用来指定配置文件目录：默认的是 conf/nginx.conf
-b)用make来编译,生成了可执行文件 make
-c)用make命令开始安装 sudo make install
+# –prefix：指定最终安装到的目录：默认值 /usr/local/nginx
+# –sbin-path：用来指定可执行文件目录：默认的是 sbin/ nginx
+# –conf-path：用来指定配置文件目录：默认的是 conf/nginx.conf
+```
+
+b)用make来编译,生成了可执行文件 ~/sourcecode/nginx-1.20.1$
+
+```shell
+make
+```
+
+c)用make命令开始安装 ~/sourcecode/nginx-1.20.1$
+
+```shell
+sudo make install
+# 安装到了根路径下的 /usr/local/nginx里了
+```
 
 # 四：nginx的启动和简单使用
 
-启动: sudo ./nginx
+启动:
+
+```shell
+# 查看进程
+ps -ef | grep nginx
+
+# invi       20018    1211  0 02:04 pts/0    00:00:00 grep --color=auto nginx
+# 可以看出来，nginx进程还没有
+
+# e 查看所有进程
+# f 以一种很宽泛的格式显示
+# ps -ef就是把所有进程罗列出来
+# | 管道符，
+# grep 查找，它要在一个指定的文本中查找指定的内容nginx
+# 然后这里的这个管道符就是要把ps -ef 列出的所有进程 作为 grep 的搜索内容，来在这些所有进程中搜索nginx
+# 这句命令 就是查找 nginx进程
+
+# 进入nginx的sbin（可执行二进制目录下）
+cd /sbin
+# /usr/local/nginx/sbin$ 
+
+# 启动nginx
+sudo ./nginx
+
+# 查看是否启动
+ps -ef | grep nginx
+
+# root       20230       1  0 02:13 ?        00:00:00 nginx: master process ./nginx
+# nobody     20231   20230  0 02:13 ?        00:00:00 nginx: worker process
+# invi       20391   20364  0 02:15 pts/1    00:00:00 grep --color=auto nginx
+
+```
