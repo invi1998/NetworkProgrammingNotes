@@ -488,5 +488,269 @@ yum instlal ntp -y
 
 # （3）基础设施之日志打印实战代码二
 ## （3.1）日志等级划分
+
+```cxx
+// 日志相关-------------------------------------------------
+// 这里把日志一共分为八个等级【级别从高到底，数字最小的级别最高，数字大的级别最低】
+// 方便管理，显示，过滤等
+
+#define NGX_LOG_STDERR            0    //控制台错误【stderr】：最高级别日志，日志的内容不再写入log参数指定的文件，而是会直接将日志输出到标准错误设备比如控制台屏幕
+#define NGX_LOG_EMERG             1    //紧急 【emerg】
+#define NGX_LOG_ALERT             2    //警戒 【alert】
+#define NGX_LOG_CRIT              3    //严重 【crit】
+#define NGX_LOG_ERR               4    //错误 【error】：属于常用级别
+#define NGX_LOG_WARN              5    //警告 【warn】：属于常用级别
+#define NGX_LOG_NOTICE            6    //注意 【notice】
+#define NGX_LOG_INFO              7    //信息 【info】
+#define NGX_LOG_DEBUG             8    //调试 【debug】：最低级别
+```
+
 ## （3.2）配置文件中和日志有关的选项
+
+```conf
+# 日志相关
+[Log]
+# 日志文件输出目录和文件名
+# Log=logs/error.log
+Log=logs/error.log
+
+# 只打印日志等级 <= 数字 的日志到日志文件中，日志等级 0 - 8 ，8 级别最低
+LogLevel = 8
+
+```
+
+void ngx_log_init() 函数
+
+```cxx
+// 描述：日志初始化，就是把日志文件打开，这里涉及到释放问题，如何解决
+void ngx_log_init()
+{
+    u_char *plogname = NULL;
+    size_t nlen;
+
+    // 从配置文件中读取日志相关的配置信息
+    CConfig *p_config = CConfig::GetInstance();
+    plogname = (u_char *)p_config->GetString("Log");
+    if(plogname == NUll)
+    {
+        // 没读到，就需要提供一个缺省的路径文件名
+        plogname = (u_char *)NGX_ERROR_LOG_PATH;    // "logs/error.log", logs目录需要提前建立出来
+
+    }
+
+    ngx_log.log_level = p_config->GetIntDefault("LogLevel", NGX_LOG_NOTICE);
+    // 缺省的日志等级为 6 【注意】,如果读失败，就给缺省的日志等级
+    // nlen = strlen((const char *)plogname);
+
+    // 只写打开|追加到末尾|文件不存在则创建文件 【这3个参数指定文件访问权限】
+    // mode = 0644:文件访问权限， 6:110， 4:100， 【用户：读写，   用户所在组：读，   其他：读】
+    ngx_log.fd = open((const char *)plogname, O_WRONLY|O_AOOEND|O_CREAT, 0644);
+    if(ngx_log.fd==-1)  // 如果有错误，则直接定位到 标准错误上去
+    {
+        ngx_log_stderr(errno, "[alert] could not open error log file: open() \"%s\" failed", plogname);
+        ngx_log.fd = STDERR_FILENO; // 直接定位到标准错误
+    }
+    
+    return;
+}
+```
+
+ngx_log_error_core()函数
+
+```cxx
+// --------------------------------------------------------------------------------------------------------------------------------------
+// 往文件中写日志，代码中有自动加换行符，所以调用时字符串不用刻意加\n
+// 日志定位标准错误，则直接往屏幕上写日志【比如日志文件打不开，这回直接定位到标准错误，此时日志就打印到屏幕上，参考 ngx_log_init()】
+// 
+// level：一个等级数字，如果我们把日志分为一些等级，已方便管理，显示，过滤等，如果这个等级数字比配置文件中的等级数字“LogLevel”大，那么这条信息就不会被写入到日志文件中
+// err: 是个错误代码，如果不是0，就应该转换为显示对应的错误信息，一起写入到日志文件中
+// ngx_log_error_core(5,7,"这个xxx工作空间有问题，显示的结果是= %s", "yyyyyyyyyy");
+
+void ngx_log_error_core(int level, int err, const char *fmt, ...)
+{
+    u_char *last;
+    u_char errstr[NGX_MAX_ERROR_STR+1];
+    // 这个+1 可以参考ngx_log_stderr()函数的写法
+
+    memset(errstr, 0, sizeof(errstr));
+    last = errstr + NGX_MAX_ERROR_STR;
+
+    struct timeval  tv;
+    struct tm       tm;
+    time_t          sec;    //  秒
+    u_char          *p;     // 指向当前要拷贝数据到其中的内存位置
+    va_list         args;
+
+    memset(&tv, 0, sizeof(struct timeval));
+    memset(&tm, 0, sizeof(struct tm));
+
+    gettimofday(&tv, NULL);
+    // 获取当前时间，返回的是自1970-01-01 00：00:00到现在经历的秒数【第二个参数是时区，一般不关心】
+
+    sec = tv.tv_sec;                // 秒
+    localtime_r(&sec, &tm);         // 把参数1的time_t转换为本地时间，保存到参数2中去，带_r的是线程安全版本
+    tm.tm_mon++;                    // 月份要调整一下才正常
+    tm.tm_year += 1900;             // 年份也要调整一下才正常
+
+    u_char strcurrtime[40]={0};     // 先组合出一个当前时间字符串，格式形如： 2019/01/08 12:32:23
+
+    ngx_slprintf(strcurrtime,
+                (u_char *)-1,                       // 若是用一个u_char *接一个 (u_char *)-1,则得到的结果是 0xffffffff... 这个值足够大
+                "%4d/%02d/%02d %02d:%02d:%02d",     // 格式是 年/月/日 时：分：秒
+                tm.tm_year, tm.tm_mon,
+                tm.tm_mday, tm.tm_hour,
+                tm.tm_min, tm.tm_sec
+    );
+    p = ngx_cpymem(errstr, strcurrtime,strlen((const char *)strcurrtime));
+    // 日期增加进来，得到形如   2019/01/08 20:26:07
+    p = ngx_slprintf(p, last, " [%s] ", err_levels[level]);
+    // 日志级别加进来，得到形如： 2019/01/08 20:26:07 [crit] 
+    p = ngx_slprintf(p, last, "%p: ", ngx_pid);
+    // 支持%p格式，进程ID增加进来，得到形如：2019/01/08 20:50:15 [crit] 2037:
+
+    va_start(args, fmt);                // 使得args指向其实参数
+    p = ngx_vslprintf(p, last, fmt, args); 
+    // 把fmt和args参数弄进去，组合出来这个字符串
+    va_end(args);                       // 释放args
+    
+    if(err)     // 如果错误代码不是0，表示有错误发生
+    {
+        // 错误代码和错误信息也要心事出来
+        p = ngx_log_errno(p, last, err);
+    }
+    // 如果位置不够，那换行也要硬插入到末尾，哪怕覆盖其他内容
+    if(p>=(last -1))
+    {
+        p = (last -1) - 1;
+    }
+    *p++ = '\n';
+    // 增加换行符
+
+    // 这么写是为了图方便：随时可以把流程弄到while后面去
+    ssize_t n;
+    while (1)
+    {
+        if(level > ngx_log.log_level)
+        {
+            // 要打印的这个日志等级态落后，（等级数字太大，比配置文件中的数字大）
+            // 这种日志就不打印了
+            break;
+        }
+
+        // 磁盘是否满了判断
+        // todolist
+
+        // 写日志文件
+        n = write(ngx_log.fd, errstr, p-errstr);
+        // 文件写入成功后，如果中途
+        if(n==-1)
+        {
+            // 写入失败
+            if(errno == ENOSPC) // 写失败了，且原因是磁盘没空间了
+            {
+                // todo
+            }
+            else
+            {
+                // 这里有其他错误，考虑把这些错误显示到标准错误设备
+                if(ngx_log.fd != STDERR_FILENO) // 当前是定位到文件的，则条件成立
+                {
+                    n = write(STDERR_FILENO, errstr, p - errstr);
+                }
+            }
+        }
+
+        break;
+
+    }
+    
+    return;
+    
+}
+
+```
+
 # （4）捋顺main函数中代码执行顺序
+
+```cxx
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "ngx_c_conf.h"     // 和配置文件处理相关的类，名字带C_表示和类有关
+#include "ngx_func.h"   // 头文件路径，已经使用gcc -I 参数指定了 各种函数声明
+#include "ngx_signal.h"
+
+// 和设置标题有关的全局量
+char **g_os_argv;   // 原始命令行参数数组，在main中会被赋值
+char *gp_envmem = NULL; // 指向自己分配的env环境变量的内存
+int g_environlen = 0;   // 环境变量所占内存的大小
+
+//和进程本身有关的全局量
+pid_t ngx_pid;               //当前进程的pid
+
+
+int main(int argc, char *const *argv)
+{   
+    int exitcode = 0;           //退出代码，先给0表示正常退出
+
+    //(1)无伤大雅也不需要释放的放最上边    
+    ngx_pid = getpid();         //取得进程pid
+    g_os_argv = (char **) argv; //保存参数指针    
+
+    //(2)初始化失败，就要直接退出的
+    //配置文件必须最先要，后边初始化啥的都用，所以先把配置读出来，供后续使用 
+    CConfig *p_config = CConfig::GetInstance(); //单例类
+    if(p_config->Load("nginx.conf") == false) //把配置文件内容载入到内存        
+    {        
+        ngx_log_stderr(0,"配置文件[%s]载入失败，退出!","nginx.conf");
+        //exit(1);终止进程，在main中出现和return效果一样 ,exit(0)表示程序正常, exit(1)/exit(-1)表示程序异常退出，exit(2)表示表示系统找不到指定的文件
+        exitcode = 2; //标记找不到文件
+        goto lblexit;
+    }
+    
+    //(3)一些初始化函数，准备放这里
+    ngx_log_init();             //日志初始化(创建/打开日志文件)
+
+
+    //(4)一些不好归类的其他类别的代码，准备放这里
+    ngx_init_setproctitle();    //把环境变量搬家
+
+    
+    //--------------------------------------------------------------    
+    for(;;)
+    //for(int i = 0; i < 10;++i)
+    {
+        sleep(1); //休息1秒        
+        printf("休息1秒\n");        
+
+    }
+      
+    //--------------------------------------
+lblexit:
+    //(5)该释放的资源要释放掉
+    freeresource();  //一系列的main返回前的释放动作函数
+    printf("程序退出，再见!\n");
+    return exitcode;
+}
+
+//专门在程序执行末尾释放资源的函数【一系列的main返回前的释放动作函数】
+void freeresource()
+{
+    //(1)对于因为设置可执行程序标题导致的环境变量分配的内存，我们应该释放
+    if(gp_envmem)
+    {
+        delete []gp_envmem;
+        gp_envmem = NULL;
+    }
+
+    //(2)关闭日志文件
+    if(ngx_log.fd != STDERR_FILENO && ngx_log.fd != -1)  
+    {        
+        close(ngx_log.fd); //不用判断结果了
+        ngx_log.fd = -1; //标记下，防止被再次close吧        
+    }
+}
+
+```
