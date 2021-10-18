@@ -30,7 +30,7 @@
 
 同步阻塞IO模型是最简单的IO模型，用户线程在内核进行IO操作时被阻塞。
 
-![img](D:\study\c++\NetworkProgrammingNotes\linux网络编程\img\142330286789443.png)
+![img](../img/142330286789443.png)
 
 图1 同步阻塞IO
 
@@ -58,7 +58,7 @@
 
 同步非阻塞IO是在同步阻塞IO的基础上，将socket设置为NONBLOCK。这样做用户线程可以在发起IO请求后可以立即返回。
 
- ![img](D:\study\c++\NetworkProgrammingNotes\linux网络编程\img\142332004602984.png)
+ ![img](../img/142332004602984.png)
 
 图2 同步非阻塞IO
 
@@ -86,7 +86,7 @@
 
 IO多路复用模型是建立在内核提供的多路分离函数select基础之上的，使用select函数可以避免同步非阻塞IO模型中轮询等待的问题。
 
-![img](D:\study\c++\NetworkProgrammingNotes\linux网络编程\img\142332187256396.png)
+![img](../img/142332187256396.png)
 
 图3 多路分离函数select
 
@@ -130,13 +130,13 @@ IO多路复用模型是建立在内核提供的多路分离函数select基础之
 
 IO多路复用模型使用了Reactor设计模式实现了这一机制。
 
-![img](D:\study\c++\NetworkProgrammingNotes\linux网络编程\img\142332350853195.png)
+![img](../img/142332350853195.png)
 
 图4 Reactor设计模式
 
 如图4所示，EventHandler抽象类表示IO事件处理器，它拥有IO文件句柄Handle（通过get_handle获取），以及对Handle的操作handle_event（读/写等）。继承于EventHandler的子类可以对事件处理器的行为进行定制。Reactor类用于管理EventHandler（注册、删除等），并使用handle_events实现事件循环，不断调用同步事件多路分离器（一般是内核）的多路分离函数select，只要某个文件句柄被激活（可读/写等），select就返回（阻塞），handle_events就会调用与文件句柄关联的事件处理器的handle_event进行相关操作。
 
-![img](D:\study\c++\NetworkProgrammingNotes\linux网络编程\img\142333254136604.png)
+![img](../img/142333254136604.png)
 
 图5 IO多路复用
 
@@ -200,13 +200,13 @@ IO多路复用是最常使用的IO模型，但是其异步程度还不够“彻�
 
 异步IO模型使用了Proactor设计模式实现了这一机制。
 
-![img](D:\study\c++\NetworkProgrammingNotes\linux网络编程\img\151608309061672.jpg)
+![img](../img/151608309061672.jpg)
 
 图6 Proactor设计模式
 
 如图6，Proactor模式和Reactor模式在结构上比较相似，不过在用户（Client）使用方式上差别较大。Reactor模式中，用户线程通过向Reactor对象注册感兴趣的事件监听，然后事件触发时调用事件处理函数。而Proactor模式中，用户线程将AsynchronousOperation（读/写等）、Proactor以及操作完成时的CompletionHandler注册到AsynchronousOperationProcessor。AsynchronousOperationProcessor使用Facade模式提供了一组异步操作API（读/写等）供用户使用，当用户线程调用异步API后，便继续执行自己的任务。AsynchronousOperationProcessor 会开启独立的内核线程执行异步操作，实现真正的异步。当异步IO操作完成时，AsynchronousOperationProcessor将用户线程与AsynchronousOperation一起注册的Proactor和CompletionHandler取出，然后将CompletionHandler与IO操作的结果数据一起转发给Proactor，Proactor负责回调每一个异步操作的事件完成处理函数handle_event。虽然Proactor模式中每个异步操作都可以绑定一个Proactor对象，但是一般在操作系统中，Proactor被实现为Singleton模式，以便于集中化分发操作完成事件。
 
-![img](D:\study\c++\NetworkProgrammingNotes\linux网络编程\img\142333511475767.png)
+![img](../img/142333511475767.png)
 
 图7 异步IO
 
