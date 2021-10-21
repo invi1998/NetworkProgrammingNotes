@@ -27,13 +27,13 @@ ulimit的作用是，显示或修改“当前shell”的resource limits，或者
 
 在用户login shell的过程中，Linux PAM的一些modules会执行，其中pam_limits module会设置当前user session的resource limits，根据/etc/security/limits.conf（默认路径）文件和/etc/security/limits.d目录下的文件（如果有的话）。所以，如果想真正修改“当前shell”的resource limits，就直接修改/etc/security/limits.conf文件，再重新login。
 
-setrlimit的使用，则更加tricky。因为setrlimit是个系统调用（ulimit是一个shell built-in command），它由一个进程的实现代码调用，而一个进程有多重身份标识（real user/groud ID, effective user/groud ID），同时，如果有privilege，进程还可以动态的切换身份（setuid/setgid，seteuid/setegid），而最终，这个进程的resource limits，又取决于进程的身份。同时，无论进程是什么身份，它的resource limits都由/etc/security/limits.conf决定了。
+setrlimit的使用，则更加tricky(棘手)。因为setrlimit是个系统调用（ulimit是一个shell built-in command），它由一个进程的实现代码调用，而一个进程有多重身份标识（real user/groud ID, effective user/groud ID），同时，如果有privilege(特权)，进程还可以动态的切换身份（setuid/setgid，seteuid/setegid），而最终，这个进程的resource limits，又取决于进程的身份。同时，无论进程是什么身份，它的resource limits都由/etc/security/limits.conf决定了。
 
 **综目前所述，ulimit和setrlimit都不能很好的解决“Too many open files”的问题。那怎么更好的解决这个问题呢？**
 
 ENFILE这个errno的存在，表明一定存在system-wide的resource limits，而不仅仅有process-specific的resource limits。按照常识，process-specific的resource limits，一定受限于system-wide的resource limits。
 
-有一个与/etc/security/limits.conf类似的pseudo file，可以用来控制system-wide fd limit：/proc/sys/fs/file-max。这个文件是可读写的，在我们系统中，是644，owner是root。那是不是说，只要取得superuser权限，是不是就可以任意修改这个文件呢？显然不可能。且不说一个fd占一个sizeof(int)的空间，在kernel中，每个打开的文件，都关联一个struct file，通常在定义在kernel source的include/linux/fs.h中：
+有一个与/etc/security/limits.conf类似的pseudo file(伪文件)，可以用来控制system-wide fd limit：/proc/sys/fs/file-max。这个文件是可读写的，在我们系统中，是644，owner是root。那是不是说，只要取得superuser权限，是不是就可以任意修改这个文件呢？显然不可能。且不说一个fd占一个sizeof(int)的空间，在kernel中，每个打开的文件，都关联一个struct file，通常在定义在kernel source的include/linux/fs.h中：
 
 ```c++
 struct file {
@@ -85,7 +85,7 @@ struct file {
 
 
 
-所以，即使有superuser权限，也不可能任意修改/proc/sys/fs/file-max文件，会受限于内存资源。这个文件是在编译kernel时，根据一个kernel constant NR_OPEN（可以理解为NumbeR of OPEN files）决定的。
+所以，即使有superuser权限，也不可能任意修改/proc/sys/fs/file-max文件，会受限于内存资源。这个文件是在编译kernel时，根据一个kernel constant NR_OPEN（可以理解为Number of OPEN files）决定的。
 
 在绝大多数情况下，NR_OPEN都是够用的。如果程序确实出现ENFILE的错误（注意，是“确实”，因为在一些开源程序中，ENFILE被滥用，直接errno = ENFILE），那么可以echo XXXXX > /proc/sys/fs/file-max解决。如果file-max设置为了最大值（NR_OPEN）还不能解决，根据不同kernel版本，有两种进一步的解决办法。
 
