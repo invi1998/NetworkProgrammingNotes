@@ -268,6 +268,17 @@ int CSocket::ngx_epoll_add_event(int fd, int readevent, int writeevent, uint32_t
 
 同时nginx还使用了一个小技巧，他不仅把连接池中的连接绑定到事件的ptr上，还做了一个位运算（|）。之前我们知道 这个c->instance 是一个位域，只占了1/8（也就是一个字节的1位），他要么是0，要么是1，首先因为c是一个指针，指针的最后一位【二进制位】肯定不是1，那么我就可以把指针的最后一位拿给位域使用，所以，和c->instance做 | 运算；到时候通过一些编码，即可以取得C的真实地址，又可以把此时此刻的c->instance值取到。所以通过这种写法，ev.data.str就能保存两个变量，首先是一个真正的指针，其次是一个位域信息
 
+那要怎么取出这个位域和恢复c地址信息呢？
+
+```c++
+instance = (uintptr_t)c & 1;                            // 将地址的最后一位取出来，用instance变量进行标识，见：ngx_epoll_add_event函数。该值当时是随着连接池中的连接一起给传进来的
+// 无论是32位还是64位机器，其地址的最后1位肯定是0，可以用下面这行语句把lpngx_connection_t的地址还原到真正的地址值
+         //注意这里的c有可能是accept前的c，用于检测是否客户端发起tcp连接事件,accept返回成功后会重新创建一个lpngx_connection_t，用来读写客户端的数据
+c = (lpngx_connection_t)((uintptr_t) c & (uintptr_t) ~1);   // 最后一位去掉，得到真正的c地址
+```
+
+
+
 ```shell
 # make编译启动项目后
 # 在root权限下使用 lsof -i:80
