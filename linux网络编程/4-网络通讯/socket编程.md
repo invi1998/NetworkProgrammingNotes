@@ -747,3 +747,77 @@ setsockopt(serv_socket, IPPROTO_TCP, TCP_NODELAY, (void*)&opt_val, sizeof(opt_va
 ![](../img/o_TCP-socket.jpg)
 
 注意以上代码都是在ubuntu下运行的，在windows的代码与此有所不同。比如要引入一个`<winsock2.h>`的头文件，调用`WSAStartup(...)`函数进行Winsock的初始化，而且它们的接受与发送函数也有所不同。
+
+
+
+# 创建一个TCP连接，要通过几个TCP套接字
+
+大家都知道tcp连接前需要客户端和服务器进行“三次握手”，那三次握手完成后这个socket是关闭了还是开启供数据传输用？
+
+开始接触tcp时，认为三次握手完成后这个socket肯定是开启的要不然怎么进行数据传送。
+
+其实不然，**三次握手完成后，服务器生成一个新的套接字**，它专门用于对应完成三次握手的用户。
+
+这个新的套接字是一个称为serverSocket的TCP套接字对象；它是专门对客户进行连接的新生成的套接字，称为连接套接字（connectionSocket）。
+
+## 总结：
+
+客户和服务器之间建立TCP连接要通过两个套接字，欢迎套接字（这是所有要与服务器通信的客户的起始接触点）和新生成的服务器侧的连接套接字（这是随后为与每个客户通信而生成的套接字）
+
+
+
+## TCP连接的服务器端有两个套接字,客户端一个
+
+在[服务器端](https://www.baidu.com/s?wd=服务器端&from=1012015a&fenlei=mv6quAkxTZn0IZRqIHckPjm4nH00T1YLnvu-n1FhuWT4rj0LrAR30ZwV5Hcvrjm3rH6sPfKWUMw85HfYnjn4nH6sgvPsT6KdThsqpZwYTjCEQLGCpyw9Uz4Bmy-bIi4WUvYETgN-TLwGUv3EPHf3rH0YPjcL)，socket()返回的套接字用于监听（listen）和接受（accept）客户端的连接请求。这个套接字不能用于与客户端之间发送和接收数据。
+
+accept()接受一个客户端的连接请求，并返回一个新的套接字。所谓“新的”就是说这个套接字与socket()返回的用于监听和接受客户端的连接请求的套接字不是同一个套接字。与本次接受的客户端的通信是通过在这个新的套接字上发送和接收数据来完成的。
+
+再次调用accept()可以接受下一个客户端的连接请求，并再次返回一个新的套接字（与socket()返回的套接字、之前accept()返回的套接字都不同的新的套接字）。这个新的套接字用于与这次接受的客户端之间的通信。
+
+假设一共有3个客户端连接到[服务器端](https://www.baidu.com/s?wd=服务器端&from=1012015a&fenlei=mv6quAkxTZn0IZRqIHckPjm4nH00T1YLnvu-n1FhuWT4rj0LrAR30ZwV5Hcvrjm3rH6sPfKWUMw85HfYnjn4nH6sgvPsT6KdThsqpZwYTjCEQLGCpyw9Uz4Bmy-bIi4WUvYETgN-TLwGUv3EPHf3rH0YPjcL)。那么在[服务器端](https://www.baidu.com/s?wd=服务器端&from=1012015a&fenlei=mv6quAkxTZn0IZRqIHckPjm4nH00T1YLnvu-n1FhuWT4rj0LrAR30ZwV5Hcvrjm3rH6sPfKWUMw85HfYnjn4nH6sgvPsT6KdThsqpZwYTjCEQLGCpyw9Uz4Bmy-bIi4WUvYETgN-TLwGUv3EPHf3rH0YPjcL)就一共有4个套接字：第1个是socket()返回的、用于监听的套接字；其余3个是分别调用3次accept()返回的不同的套接字。
+
+如果已经有客户端连接到服务器端，不再需要监听和接受更多的客户端连接的时候，可以关闭由socket()返回的套接字，而不会影响与客户端之间的通信。
+
+当某个客户端断开连接、或者是与某个客户端的通信完成之后，服务器端需要关闭用于与该客户端通信的套接字。
+
+举个简单的例子（以下代码只是示范性的，用于说明不同套接字的作用，实际的函数会需要更多的参数）：
+
+```c++
+/* 建立用于监听和接受客户端连接请求的套接字 */
+server_sock = socket();
+/* 绑定监听的IP地址和端口 */
+bind(server_sock);
+/* 开始监听 */
+listen(server_sock);
+/**
+* 等待客户端连接请求，在没有客户端连接请求到来之前，
+* 程序会一直阻塞在这个函数里。
+*/
+client_sock = accept(server_sock);
+/**
+* 已经接受客户端连接请求，accept()函数创建并返回了一个
+* 新的套接字client_sock，用于与客户端通信。
+* 如果不再需要接受其他客户端的连接请求，可以关闭监听
+* 套接字了。
+*/
+close(server_sock);
+/* 发送数据到客户端 */
+send(client_sock, data);
+/* 从客户端接收数据 */
+recv(client_sock, data);
+/* 通信结束，关闭与客户端通信的套接字 */
+close(client_sock);
+```
+
+accept4()函数共有4个参数，相比accept()多了一个flags的参数，用户可以通过此参数直接设置套接字的一些属性，如SOCK_NONBLOCK或者是SOCK_CLOEXEC。
+
+当accept4的flags为0的时候，accept4和accept没有区别。
+
+当一个进程使用fork()函数创建了一个子进程时，紫禁城会拷贝父进程的几乎所有内容，包括打开的文件描述符。
+但是，实际上fork的过程是子进程复制了父进程的task_struct结构体，然后修改其中的部分内容。而文件描述符的部分，是直接复制的父进程的，也就是说，子进程并不是重新打开，而是直接复制，所以子进程和父进程使用的是相同的文件描述符。
+
+而当子进程使用exec函数族执行新的程序的时候，新的内容会替换掉原空间中的内容，所以，文件描述符相关的东西就找不到了，这个文件描述符就无法关闭了。所以，在调用exec函数族前需要手动关闭文件描述符。
+
+而当文件描述符设置了O_CLOEXEC属性后，在调用exec函数族时，文件描述符就会自动关闭，无需手动关闭。
+
+SOCK_CLOEXEC和O_CLOEXEC标志位，与使用fcntl设置文件描述符的FD_CLOEXEC有同样的作用，都是在fork的子进程中用exec系列系统调用加载新的可执行程序之前，关闭子进程中fork得到的fd。

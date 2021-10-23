@@ -1,6 +1,6 @@
 # （1）ngx_epoll_process_events函数调用位置
 
-之前的代码实现了 epoll_create()，epoll_ctl()：现在我们已经做好尊卑，等待迎接客户端主动发起三次握手连接
+之前的代码实现了 epoll_create()，epoll_ctl()：现在我们已经做好准备，等待迎接客户端主动发起三次握手连接
 
 下面将研究，如何获取用户的连接事件，并怎样把用户接入进来
 
@@ -66,7 +66,7 @@
 
 # （2）ngx_epoll_process_events函数内容
 
-用户三次握手成功，然后连入进来，这个 “连入进来” 事件对于服务器来讲，就是一个监听套接字上的可读事件
+用户三次握手成功，然后连入进来，这个 “连入进来” 事件对于服务器来讲，就是一个监听套接字上的可读事件。在ngx_epoll_process_events()函数中，通过调用epoll_wait()函数，来获取发生的事件。【**epoll_wait()就是从epoll对象的双向链表中，获取事件，我们通过epol_wait()获取事件的同时，也就相当于把事件对应的套接字拿到了，对于三次握手，我们拿到事件的套接字也就是对应程序里监听套接字**】
 
 ```c++
 // 开始获取发生的事件消息
@@ -76,6 +76,7 @@
 int CSocket::ngx_epoll_process_events(int timer)
 {
     // 等待事件，事件会返回到m_events里，最多返回NGX_MAX_EVENTS个事件【因为我们这里只提供了这些内存】
+    // 如果两次调用epoll_wait()的时间间隔太长，则可能在epoll的双向链表中，积累了多个事件，所以调用epoll_wait()可能取到多个事件，但是具体取到几个事件，还取决于你NGX_MAX_EVENTS的大小以及实际有的事件数
     // 阻塞timer这么长的时间，除非：1）：阻塞时间到达，2）阻塞期间收到了事件会立即返回，3）调用的时候有事件也会立即返回，4）如果来个信号，比如使用kill -1 pid测试
     // 如果timer为-1则一直阻塞，如果timer为0则立即返回，即便没有任何事件
     // 返回值：  有错误发生返回-1，错误在errno中，比如：你发送了一个信号过来，就返回-1，错误信息（4：Interrupted system call)（系统回调中断）
@@ -126,8 +127,6 @@ int CSocket::ngx_epoll_process_events(int timer)
         c = (lpngx_connection_t)(m_events[i].data.ptr);         // ngx_epoll_add_event()给进去的，这里就能取出来
         instance = (uintptr_t)c & 1;                            // 将地址的最后一位取出来，用instance变量进行标识，见：ngx_epoll_add_event函数。该值当时是随着连接池中的连接一起给传进来的
         c = (lpngx_connection_t)((uintptr_t) c & (uintptr_t) ~1);   // 最后一位去掉，得到真正的c地址
-		// 运算符m&n的结果是求出m/n的剩余数据个数（余数）
-		// 运算符m&~n的结果是求出剩余数据的起始位置
         
         // 仔细分析一下官方nginx这个判断
         // 一个套接字，当关联一个连接池中的连接【对象】时，这个套接字值是要给到c->fd的
@@ -143,6 +142,7 @@ int CSocket::ngx_epoll_process_events(int timer)
             ngx_log_error_core(NGX_LOG_DEBUG,0,"CSocekt::ngx_epoll_process_events()中遇到了fd=-1的过期事件:%p.",c); 
             continue; //这种事件就不处理即可
         }
+        
 
         if(c->instance != instance)
         {
@@ -180,6 +180,8 @@ int CSocket::ngx_epoll_process_events(int timer)
         {
             // 一个客户端新连入，这个就会成立
             // c->r_ready = 1;              // 标记可读。【从连接池中拿出一个连接时，这个连接的所有成员都是0】
+            // 为什么可以这样掉用呢？看该函数指针定义方法（他是一个成员函数指针）
+            // typedef void (CSocket::*ngx_event_handler_pt)(lpngx_connection_t c);    // 定义成员函数指针
             (this->*(c->rhandler))(c);      // 注意括号的运用，来正确的设置优先级，防止编译出错；如果是个新客户连入
                                             // 如果新连接进入，这里执行的应该是CSocket::ngx_event_accept(c)
                                             // 如果是已经连入，发送数据到这里，则这里执行的应该是CSocket::ngx_wait_request_handler
@@ -312,6 +314,7 @@ void CSocket::ngx_event_accept(lpngx_connection_t oldc)
 
         // 走到这里，表示accept4()成功了
         // ngx_log_stderr(errno, "accept4成功s=%d", s);    // s这里就是一个句柄了
+        // 走到这里，表示有了一个新的套接字生成，那我就需要绑定一个新的内存到连接池中
         newc = ngx_get_connection(s);
         if (newc == NULL)
         {
@@ -388,6 +391,23 @@ ET：edge trigged， 边缘触发/边沿触发，这种工作模式 高速模式
 边缘触发的意思：只对非阻塞socket有用；来一个事件，内核只会通知你一次【不管你是否处理，内核都不再次通知你】；
 边缘触发模式，提高系统运行效率，编码的难度加大；因为只通知一次，所以接到通知后，你必须要保证把该处理的事情处理利索；
 程序高手能够洞察到很多普通程序员所洞察不到的问题，并且能够写出更好的，更稳定的，更少出错误的代码；
+
+监听套接字使用的是LT默认的水平触发模式，
+
+监听套接字来事件的读处理
+
+```c++
+// 对于监听端口的读事件设置处理方法，因为监听端口是用来等待对象连接的发送三次握手的，所以监听端口关心的就是【读事件】
+        c->rhandler = &CSocket::ngx_event_accept;
+```
+
+接入进来的用户套接字的读处理
+
+```c++
+newc->rhandler = &CSocket::ngx_wait_request_handler;    // 设置数据来的时候的读处理函数。其实官方nginx中是ngx_http_wait_request_handler()
+```
+
+对于事件的处理函数以及具体哪些套接字调用的哪些函数都得严格分清楚
 
 # （4）总结和测试
 
