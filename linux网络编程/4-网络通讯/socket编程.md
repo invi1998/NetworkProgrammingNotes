@@ -1,3 +1,11 @@
+[TOC]
+
+
+
+#### TCP socket的buffer
+
+每个TCP socket在内核中都有一个发送缓冲区和一个接收缓冲区，TCP的全双工的工作模式以及TCP的流量(拥塞)控制便是依赖于这两个独立的buffer以及buffer的填充状态。接收缓冲区把数据缓存入内核，应用进程一直没有调用recv()进行读取的话，此数据会一直缓存在相应socket的接收缓冲区内。再啰嗦一点，不管进程是否调用recv()读取socket，对端发来的数据都会经由内核接收并且缓存到socket的内核接收缓冲区之中。recv()所做的工作，就是把内核缓冲区中的数据拷贝到应用层用户的buffer里面，并返回，仅此而已。进程调用send()发送的数据的时候，最简单情况（也是一般情况），将数据拷贝进入socket的内核发送缓冲区之中，然后send便会在上层返回。换句话说，send（）返回之时，数据不一定会发送到对端去（和write写文件有点类似），send()仅仅是把应用层buffer的数据拷贝进socket的内核发送buffer中，发送是TCP的事情，和send其实没有太大关系。接收缓冲区被TCP用来缓存网络上来的数据，一直保存到应用进程读走为止。对于TCP，如果应用进程一直没有读取，接收缓冲区满了之后，发生的动作是：收端通知发端，接收窗口关闭（win=0）。这个便是滑动窗口的实现。保证TCP套接口接收缓冲区不会溢出，从而保证了TCP是可靠传输。因为对方不允许发出超过所通告窗口大小的数据。 这就是TCP的流量控制，如果对方无视窗口大小而发出了超过窗口大小的数据，则接收方TCP将丢弃它。
+
 #### 1. 套接字对象的创建
 
 ```C++
@@ -152,9 +160,9 @@ htons的功能：将一个无符号短整型的主机数值转换为网络[字�
 | 1    | big-endian    | 大尾顺序 | 地址的低位存储值的高位 **【高位在前低位在后】** |
 | 2    | little-endian | 小尾顺序 | 地址的低位存储值的低位 **【高位在后低位在前】** |
 
-#### 示例
+##### 示例
 
-### 例1
+###### 例1
 
 而我们常用的 x86 CPU (intel, AMD) 电脑是 little-endian,也就是整数的低位[字节](https://baike.baidu.com/item/字节)放在内存的低字节处。举个例子吧。假定你的数据是0x1234,
 
@@ -172,7 +180,7 @@ addr addr+1
 
 htons 的用处就是把实际主机内存中的整数存放方式调整成网络[字节顺序](https://baike.baidu.com/item/字节顺序)。
 
-### 例2 C++代码示例
+###### 例2 C++代码示例
 
 ```c++
 #include <winsock2.h>
@@ -208,7 +216,7 @@ int main()
 | PowerPC  | NT       | little-endian |
 | PowerPC  | 非NT     | big-endian    |
 
-#### setsockopt()
+##### setsockopt()
 
 在TCP连接中，**recv等函数默认为阻塞模式(block)**，即**直到有数据到来之前函数不会返回**，而我们有时则需要一种**超时机制使其在一定时间后返回**而不管是否有数据到来，这里我们就会用到`setsockopt()`函数：
 
@@ -239,7 +247,7 @@ setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv_out, sizeof(tv_out));
 
 这样我们就**设定了recv()函数的超时机制**，当超过tv_out**设定的时间而没有数据到来时recv()就会返回0值**。
 
-#### 设置套接口的选项。
+##### 设置套接口的选项。
 
 ```c++
   #include <winsock.h>
@@ -407,6 +415,12 @@ ssize_t send (int sockfd, const void *buf, size_t nbytes, int flag) ;
 
 第四个参数是传输数据时可指定的信息，一般设置为0。
 
+**send函数工作原理：**
+
+ send函数只负责将数据提交给协议层。 当调用该函数时，send先比较待发送数据的长度len和套接字s的发送缓冲区的长度，如果len大于s的发送缓冲区的长度，该函数返回SOCKET_ERROR； 如果len小于或者等于s的发送缓冲区的长度，那么send先检查协议是否正在发送s的发送缓冲中的数据； 如果是就等待协议把数据发送完，如果协议还没有开始发送s的发送缓冲中的数据或者s的发送缓冲中没有数据，那么send就比较s的发送缓冲区的剩余空间和len； 如果len大于剩余空间大小，send就一直等待协议把s的发送缓冲中的数据发送完，如果len小于剩余空间大小，send就仅仅把buf中的数据copy到剩余空间里（注意并不是send把s的发送缓冲中的数据传到连接的另一端的，而是协议传的，send仅仅是把buf中的数据copy到s的发送缓冲区的剩余空间里）。 如果send函数copy数据成功，就返回实际copy的字节数，如果send在copy数据时出现错误，那么send就返回SOCKET_ERROR； 如果send在等待协议传送数据时网络断开的话，那么send函数也返回SOCKET_ERROR。
+
+  要注意send函数把buf中的数据成功copy到s的发送缓冲的剩余空间里后它就返回了，但是此时这些数据并不一定马上被传到连接的另一端。 如果协议在后续的传送过程中出现网络错误的话，那么下一个Socket函数就会返回SOCKET_ERROR。（每一个除send外的Socket函数在执行的最开始总要先等待套接字的发送缓冲中的数据被协议传送完毕才能继续，如果在等待时出现网络错误，那么该Socket函数就返回SOCKET_ERROR）  
+
 #### 6. recv/read接受信息
 
 linux下的接收函数为
@@ -425,6 +439,18 @@ ssize_t read (int __fd, void *__buf, size_t __nbytes);
 ```C++
 ssize_t recv(int sockfd, void *buf, size_t nbytes, int flag) ;
 ```
+
+**recv函数工作原理：**
+
+接收来自socket缓冲区对字节数据,当缓冲区没有数据可取时,recv会一直处于阻塞状态,直到缓冲区至少又一个字节数据可取,或者远程端关闭,关闭远程端并读取所有数据后,返回空字符串.
+
+  recv先检查套接字s的接收缓冲区，如果s接收缓冲区中没有数据或者协议正在接收数据，那么recv就一直等待，直到协议把数据接收完毕。当协议把数据接收完毕，recv函数就把s的接收缓冲中的数据copy到buf中（注意协议接收到的数据可能大于buf的长度，所以在这种情况下要调用几次recv函数才能把s的接收缓冲中的数据copy完。recv函数仅仅是copy数据，真正的接收数据是协议来完成的），recv函数返回其实际copy的字节数。如果recv在copy时出错，那么它返回SOCKET_ERROR；如果recv函数在等待协议接收数据时网络中断了，那么它返回0 。
+ 对方优雅的关闭socket并不影响本地recv的正常接收数据；如果协议缓冲区内没有数据，recv返回0，指示对方关闭；如果协议缓冲区有数据，则返回对应数据(可能需要多次recv)，在最后一次recv时，返回0，指示对方关闭。
+
+**要点：**
+
+在进行TCP协议传输的时候，要注意数据流传输的特点，recv和send不一定是一一对应的（一般情况下是一一对应），也就是说并不是send一次，就一定recv一次就接收完，有可能send一次，recv多次才接收完，也可能send多次，一次recv就接收完了。TCP协议会保证数据的有序完整的传输，但是如何去正确完整的处理每一条信息，是程序员的事情。
+例如：服务器在循环recv，recv的缓冲区大小为100byte，客户端在循环send，每次send 6byte数据，则recv每次收到的数据可能为6byte，12byte，18byte，这是随机的，编程的时候注意正确的处理。
 
 #### 7. 关闭连接
 
@@ -459,7 +485,7 @@ int connect (int socket, struct sockaddr* servaddr, socklen_t addrlen);
 
 几个参数的意义和前面的accept函数意义一样。要注意的是服务器端收到连接请求的时候并不是马上调用accept()函数，而是把它放入到请求信息的等待队列中。
 
-## 套接字的多种可选项
+### 套接字的多种可选项
 
 可以通过如下函数对套接字可选项的参数进行获取以及设置。
 
@@ -698,7 +724,7 @@ void errorhandling(char *message){
 }
 ```
 
-## 编译指令
+#### 编译指令
 
 ```shell
 #服务端
@@ -740,7 +766,7 @@ setsockopt(serv_socket, IPPROTO_TCP, TCP_NODELAY, (void*)&opt_val, sizeof(opt_va
 
 ------
 
-## 程序案例
+### 程序案例
 
 案例的过程，在网上看到了关于read和write的发送与接受过程的图，便于理解：
 
@@ -750,7 +776,7 @@ setsockopt(serv_socket, IPPROTO_TCP, TCP_NODELAY, (void*)&opt_val, sizeof(opt_va
 
 
 
-# 创建一个TCP连接，要通过几个TCP套接字
+#### 创建一个TCP连接，要通过几个TCP套接字
 
 大家都知道tcp连接前需要客户端和服务器进行“三次握手”，那三次握手完成后这个socket是关闭了还是开启供数据传输用？
 
@@ -760,13 +786,13 @@ setsockopt(serv_socket, IPPROTO_TCP, TCP_NODELAY, (void*)&opt_val, sizeof(opt_va
 
 这个新的套接字是一个称为serverSocket的TCP套接字对象；它是专门对客户进行连接的新生成的套接字，称为连接套接字（connectionSocket）。
 
-## 总结：
+##### 总结：
 
 客户和服务器之间建立TCP连接要通过两个套接字，欢迎套接字（这是所有要与服务器通信的客户的起始接触点）和新生成的服务器侧的连接套接字（这是随后为与每个客户通信而生成的套接字）
 
 
 
-## TCP连接的服务器端有两个套接字,客户端一个
+#### TCP连接的服务器端有两个套接字,客户端一个
 
 在[服务器端](https://www.baidu.com/s?wd=服务器端&from=1012015a&fenlei=mv6quAkxTZn0IZRqIHckPjm4nH00T1YLnvu-n1FhuWT4rj0LrAR30ZwV5Hcvrjm3rH6sPfKWUMw85HfYnjn4nH6sgvPsT6KdThsqpZwYTjCEQLGCpyw9Uz4Bmy-bIi4WUvYETgN-TLwGUv3EPHf3rH0YPjcL)，socket()返回的套接字用于监听（listen）和接受（accept）客户端的连接请求。这个套接字不能用于与客户端之间发送和接收数据。
 
