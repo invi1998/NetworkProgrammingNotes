@@ -580,3 +580,7 @@ Nginx 在启动后，会有一个 master 进程和多个 worker 进程。master 
 ![](img/架构.jpg)
 
 用到的技术。信号量，并发，多线程，线程池，epoll，信号集【多进程编程】，守护进程编写。。。。
+
+
+
+![](img/epoll架构.jpg)
