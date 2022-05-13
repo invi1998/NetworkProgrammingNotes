@@ -10,9 +10,6 @@ Visual Studio Code在其中可以安装很多扩展模块；
 官方地址：<https://code.visualstudio.com>
 <https://code.visualstudio.com/download>
 为支持语法高亮，跳转到函数等等，可能需要安装扩展包；
-————————————————
-版权声明：本文为CSDN博主「昔拉天使」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
-原文链接：<https://blog.csdn.net/qq_39885372/article/details/104666051>
 
 # （3）nginx源码入口函数定位
 
